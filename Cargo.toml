@@ -1,0 +1,10 @@
+[package]
+name = "libharu"
+version = "0.1.0"
+authors = ["Peter Reid <peter.d.reid@gmail.com>"]
+
+[dependencies]
+libc = "*"
+
+[dependencies.libharu_sys]
+path = "../libharu_sys"
