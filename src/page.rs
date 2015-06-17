@@ -1,14 +1,15 @@
 
+use document_inner::DocumentInner;
 use libharu_sys as haru;
 use std::ffi::CString;
-use std::marker::PhantomData;
+use std::rc::Rc;
 
 use error::{Error, Result};
 use font::Font;
 
-pub struct Page<'a> {
+pub struct Page {
     handle: haru::HPDF_Page,
-    marker: PhantomData<&'a i32>,
+    _doc: Rc<DocumentInner>
 }
 
 pub enum LineCap {
@@ -48,9 +49,9 @@ impl Size {
 }
 
 
-impl <'a> Page<'a> {
-    pub fn from_handle(handle: haru::HPDF_Page) -> Page<'a> {
-        Page{ handle: handle, marker: PhantomData }
+impl Page {
+    pub fn from_handle(handle: haru::HPDF_Page, doc: Rc<DocumentInner>) -> Page {
+        Page{ handle: handle, _doc: doc }
     }
     
     pub unsafe fn get_handle(&self) -> haru::HPDF_Page {
@@ -143,6 +144,10 @@ impl <'a> Page<'a> {
         Error::from_status( unsafe { haru::HPDF_Page_Arc(self.handle, 
             center.x, center.y, ray_endpoint.x, ray_endpoint.y, angle_degrees)})
     }
+    pub fn circle(&mut self, center: Point, radius: f32) -> Result<()> {
+        Error::from_status( unsafe { haru::HPDF_Page_Circle(
+            self.handle, center.x, center.y, radius)})
+    }
     
     pub fn close_path(&mut self) -> Result<()> {
         Error::from_status( unsafe { haru::HPDF_Page_ClosePath(self.handle) } )
@@ -181,7 +186,7 @@ impl <'a> Page<'a> {
         Error::from_status( unsafe { haru::HPDF_Page_EndPath(self.handle) } )
     }
     
-    pub fn set_font_and_size(&mut self, font: Font, size: f32) -> Result<()> {
+    pub fn set_font_and_size(&mut self, font: &Font, size: f32) -> Result<()> {
         Error::from_status( unsafe { haru::HPDF_Page_SetFontAndSize(self.handle, font.get_handle(), size) } )
     }
     

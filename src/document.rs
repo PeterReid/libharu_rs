@@ -1,77 +1,77 @@
 
 use libharu_sys as haru;
-use std::ffi::CString;
 use std::ptr;
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::mem::{transmute, forget};
 use std::slice;
 use std::boxed::Box;
 
+use document_inner::DocumentInner;
 use error::{Code, Error, Result};
 use font::Font;
 use page::Page;
 use page_layout::PageLayout;
 use std::ops::DerefMut;
+use std::rc::Rc;
 
 pub struct Document {
-    handle: haru::HPDF_Doc,
+    inner: Rc<DocumentInner>
 }
 
 impl Document {
     pub fn new() -> Result<Document> {
         let handle = try!(Error::check_non_null(unsafe { haru::HPDF_New(None, ptr::null_mut()) }));
-        
         try!( Error::from_status(unsafe { haru::HPDF_UseUTFEncodings(handle) } ) );
         
-        
         Ok(Document {
-            handle: handle
+            inner: Rc::new(DocumentInner{handle: handle})
         })
+        
     }
     
     pub fn set_pages_configuration(&mut self, page_per_pages: u32) -> Result<()> {
-        Error::from_status( unsafe { haru::HPDF_SetPagesConfiguration(self.handle, page_per_pages ) })
+        Error::from_status( unsafe { haru::HPDF_SetPagesConfiguration(self.inner.handle, page_per_pages ) })
     }
     
     pub fn set_page_layout(&mut self, layout: PageLayout) -> Result<()> {
         let layout_code = layout.as_int();
-        Error::from_status( unsafe { haru::HPDF_SetPageLayout(self.handle, layout_code ) })
+        Error::from_status( unsafe { haru::HPDF_SetPageLayout(self.inner.handle, layout_code ) })
     }
     
     pub fn get_page_layout(&self) -> Option<PageLayout> {
-        PageLayout::from_int( unsafe { haru::HPDF_GetPageLayout(self.handle) } )
+        PageLayout::from_int( unsafe { haru::HPDF_GetPageLayout(self.inner.handle) } )
     }
     
-    pub fn add_page<'a>(&'a self) -> Result<Page<'a>> {
-        let page = try!(Error::check_non_null(unsafe { haru::HPDF_AddPage(self.handle) }));
+    pub fn add_page(&self) -> Result<Page> {
+        let page = try!(Error::check_non_null(unsafe { haru::HPDF_AddPage(self.inner.handle) }));
         
-        Ok(Page::from_handle(page))
+        Ok(Page::from_handle(page, self.inner.clone()))
     }
     
-    pub fn insert_page<'a>(&'a self, target: Page<'a>) -> Result<Page<'a>> {
-        let page = try!(Error::check_non_null(unsafe { haru::HPDF_InsertPage(self.handle, target.get_handle()) }));
+    pub fn insert_page(&self, target: Page) -> Result<Page> {
+        let page = try!(Error::check_non_null(unsafe { haru::HPDF_InsertPage(self.inner.handle, target.get_handle()) }));
         
-        Ok(Page::from_handle(page))
+        Ok(Page::from_handle(page, self.inner.clone()))
     }
     
     /*pub fn get_font(&self, name: &str) -> Result<Font> {
         let chrs = try!(CString::new(name));
         let encoder_name = try!(CString::new("UTF-8"));
         
-        let encoder = unsafe { haru::HPDF_GetEncoder(self.handle, encoder_name.as_ptr()) };
+        let encoder = unsafe { haru::HPDF_GetEncoder(self.inner.handle, encoder_name.as_ptr()) };
         println!("Encoder = {:?} {}", encoder, encoder==ptr::null_mut());
         
-        let font_handle = unsafe { haru::HPDF_GetFont(self.handle, chrs.as_ptr(), encoder_name.as_ptr()) };
+        let font_handle = unsafe { haru::HPDF_GetFont(self.inner.handle, chrs.as_ptr(), encoder_name.as_ptr()) };
         if font_handle == ptr::null_mut() {
             println!("It returned null");
-            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.handle) } ) );
+            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.inner.handle) } ) );
             return Error::new_err(Code::Unknown);
         }
         
         Ok(Font::from_handle(font_handle))
     }*/
     
-    pub fn get_ttf_font2<R: Read+Seek>(&self, r: R) -> Result<Font> {
+    pub fn get_ttf_font<R: Read+Seek>(&self, r: R) -> Result<Font> {
         extern "C" fn read<R: Read+Seek>(stream: haru::HPDF_Stream, ptr: *mut haru::HPDF_BYTE, size: *mut haru::HPDF_UINT) -> haru::HPDF_STATUS {
             let r : &mut TellingReader<R> = unsafe { transmute( (*stream).attr ) };
             let buf: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, *size as usize) };
@@ -144,7 +144,7 @@ impl Document {
             }
         }
         
-        let mmgr = unsafe { haru::HPDF_GetMMgr(self.handle) };
+        let mmgr = unsafe { haru::HPDF_GetMMgr(self.inner.handle) };
         
         let mut tr = Box::new(TellingReader{
             reader: r,
@@ -164,45 +164,45 @@ impl Document {
         forget(tr);
         
         // The font takes ownership of the stream
-        let name = unsafe { haru::HPDF_LoadTTFontFromStream(self.handle, stream, 1, ptr::null()) };
+        let name = unsafe { haru::HPDF_LoadTTFontFromStream(self.inner.handle, stream, 1, ptr::null()) };
          
         if name == ptr::null() {
-            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.handle) } ) );
+            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.inner.handle) } ) );
             return Error::new_err(Code::Unknown);
         }
         
-        let font_handle = unsafe { haru::HPDF_GetFont(self.handle, name, b"UTF-8".as_ptr() as *const i8) };
+        let font_handle = unsafe { haru::HPDF_GetFont(self.inner.handle, name, b"UTF-8".as_ptr() as *const i8) };
         if font_handle == ptr::null_mut() {
-            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.handle) } ) );
+            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.inner.handle) } ) );
             return Error::new_err(Code::Unknown);
         }
         
-        Ok(Font::from_handle(font_handle))
+        Ok(Font::from_handle(font_handle, self.inner.clone()))
     }
     
-    pub fn get_ttf_font(&self, file_name: &str) -> Result<Font> {
+    /*pub fn get_ttf_font(&self, file_name: &str) -> Result<Font> {
         let file_name_buf = try!(CString::new(file_name));
-        let name = unsafe { haru::HPDF_LoadTTFontFromFile(self.handle, file_name_buf.as_ptr(), 1) };
+        let name = unsafe { haru::HPDF_LoadTTFontFromFile(self.inner.handle, file_name_buf.as_ptr(), 1) };
         if name == ptr::null() {
             println!("HPDF_LoadTTFontFromFile null");
-            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.handle) } ) );
+            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.inner.handle) } ) );
             return Error::new_err(Code::Unknown);
         }
         
         let encoder_name = try!(CString::new("UTF-8"));
         
-        let encoder = unsafe { haru::HPDF_GetEncoder(self.handle, encoder_name.as_ptr()) };
+        let encoder = unsafe { haru::HPDF_GetEncoder(self.inner.handle, encoder_name.as_ptr()) };
         println!("Encoder = {:?} {}", encoder, encoder==ptr::null_mut());
         
-        let font_handle = unsafe { haru::HPDF_GetFont(self.handle, name, encoder_name.as_ptr()) };
+        let font_handle = unsafe { haru::HPDF_GetFont(self.inner.handle, name, encoder_name.as_ptr()) };
         if font_handle == ptr::null_mut() {
             println!("HPDF_GetFont returned null");
-            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.handle) } ) );
+            try!(Error::from_status( unsafe { haru::HPDF_GetError(self.inner.handle) } ) );
             return Error::new_err(Code::Unknown);
         }
         
         Ok(Font::from_handle(font_handle))
-    }
+    }*/
 
     pub fn save<W: Write>(&self, w: &mut W) -> Result<()> {
         extern "C" fn write_fn<W: Write>(stream: haru::HPDF_Stream, ptr: *const haru::HPDF_BYTE, size: haru::HPDF_UINT) -> haru::HPDF_STATUS {
@@ -215,17 +215,11 @@ impl Document {
             }
         }
         
-        let mmgr = unsafe { haru::HPDF_GetMMgr(self.handle) };
+        let mmgr = unsafe { haru::HPDF_GetMMgr(self.inner.handle) };
         let stream = unsafe { haru::HPDF_CallbackWriter_New(mmgr, Some(write_fn::<W>), w as *mut W as *mut ::libc::c_void) };
-        let err = unsafe { haru::HPDF_SaveToExternalStream(self.handle, stream) };
+        let err = unsafe { haru::HPDF_SaveToExternalStream(self.inner.handle, stream) };
         unsafe { haru::HPDF_Stream_Free(stream); }
         
         Error::from_status(err)
-    }
-}
-
-impl Drop for Document {
-    fn drop(&mut self) {
-        unsafe { haru::HPDF_Free(self.handle); }
     }
 }

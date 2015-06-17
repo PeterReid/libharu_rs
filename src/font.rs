@@ -1,17 +1,30 @@
 
 use libharu_sys as haru;
-use std::marker::PhantomData;
+use document_inner::DocumentInner;
+use std::rc::Rc;
 
-#[derive(Copy, Clone)]
-pub struct Font<'a> {
+#[derive(Clone)]
+pub struct Font {
     handle: haru::HPDF_Font,
-    marker: PhantomData<&'a i32>,
+    _doc: Rc<DocumentInner>
 }
 
 
-impl <'a> Font<'a> {
-    pub fn from_handle(handle: haru::HPDF_Font) -> Font<'a> {
-        Font{ handle: handle, marker: PhantomData }
+impl  Font {
+    pub fn from_handle(handle: haru::HPDF_Font, doc: Rc<DocumentInner>) -> Font {
+        Font{ handle: handle, _doc: doc}
+    }
+    
+    pub fn get_ascent(&self) -> f32 {
+        unsafe {
+            haru::HPDF_Font_GetAscent(self.handle) as f32 / 1000.0
+        }
+    }
+    
+    pub fn get_descent(&self) -> f32 {
+        unsafe {
+            haru::HPDF_Font_GetAscent(self.handle) as f32 / 1000.0
+        }
     }
     
     pub unsafe fn get_handle(&self) -> haru::HPDF_Page {
