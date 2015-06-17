@@ -7,4 +7,4 @@ authors = ["Peter Reid <peter.d.reid@gmail.com>"]
 libc = "*"
 
 [dependencies.libharu_sys]
-path = "../libharu_sys"
+git = "https://github.com/PeterReid/libharu_sys_rs"
