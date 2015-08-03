@@ -31,15 +31,23 @@ fn simple() {
         try!(page1.line_to(Point::new(100.0, 100.0)));
         try!(page1.fill());
         
-        /*let font = try!(doc.get_ttf_font(File::open("tiny.ttf").unwrap()));
+        /*let font = try!(doc.get_ttf_font(File::open("Roboto-Regular.ttf").unwrap()));
         
+        let to_print = "35° 44.23' with some";
         try!(page1.set_rgb_fill(0.0, 0.0, 0.0));
-        try!(page1.set_font_and_size(font, 14.0));
+        try!(page1.set_font_and_size(&font, 14.0));
         try!(page1.begin_text());
-        try!(page1.text_out(Point::new(40.0, 40.0), "35° 44.23'"));
+        try!(page1.text_out(Point::new(40.0, 40.0), to_print));
         try!(page1.end_text());
-        */
-        let mut out = ::std::fs::File::create("2.pdf").unwrap();
+        
+        let width = font.measure_width(to_print, 14.0);
+        println!("Width = {}", width);
+        
+        try!(page1.move_to(Point::new(40.0, 40.0)));
+        try!(page1.line_to(Point::new(40.0 + width, 40.0)));
+        try!(page1.stroke());*/
+        
+        let mut out = File::create("2.pdf").unwrap();
         try!(doc.save(&mut out));
         
         
@@ -48,6 +56,6 @@ fn simple() {
     }
     
     go().unwrap();
-    assert!(false);
+    panic!("To see printlns");
 }
 
