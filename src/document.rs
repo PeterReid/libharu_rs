@@ -165,13 +165,15 @@ impl Document {
         
         // The font takes ownership of the stream
         let name = unsafe { haru::HPDF_LoadTTFontFromStream(self.inner.handle, stream, 1, ptr::null()) };
-         
+        
         if name == ptr::null() {
+            println!("No name");
             try!(Error::from_status( unsafe { haru::HPDF_GetError(self.inner.handle) } ) );
             return Error::new_err(Code::Unknown);
         }
         
-        let font_handle = unsafe { haru::HPDF_GetFont(self.inner.handle, name, b"UTF-8".as_ptr() as *const i8) };
+        let utf8 = b"UTF-8\0";
+        let font_handle = unsafe { haru::HPDF_GetFont(self.inner.handle, name, utf8.as_ptr() as *const i8) };
         if font_handle == ptr::null_mut() {
             try!(Error::from_status( unsafe { haru::HPDF_GetError(self.inner.handle) } ) );
             return Error::new_err(Code::Unknown);
